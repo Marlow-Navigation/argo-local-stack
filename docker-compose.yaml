@@ -1,0 +1,159 @@
+version: "3.8"
+
+services:
+
+  postgres:
+    image: postgres:latest
+    container_name: poseidon-postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+    volumes:
+      - poseidon-postgres-data:/var/lib/postgresql
+    restart: unless-stopped
+    networks:
+      - phoebe-network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: poseidon-pgadmin
+    ports:
+      - "${PGADMIN_PORT:-58080}:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@local.dev}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+    depends_on:
+      - postgres
+    volumes:
+      - poseidon-pgadmin-data:/var/lib/pgadmin
+    networks:
+      - phoebe-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: poseidon-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - poseidon-zookeeper-data:/var/lib/zookeeper/data
+    networks:
+      - phoebe-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: poseidon-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: ${KAFKA_LISTENERS:-PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092}
+      KAFKA_ADVERTISED_LISTENERS: ${KAFKA_ADVERTISED_LISTENERS:-PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: ${KAFKA_LISTENER_SECURITY_PROTOCOL_MAP:-PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT}
+      KAFKA_INTER_BROKER_LISTENER_NAME: ${KAFKA_INTER_BROKER_LISTENER_NAME:-PLAINTEXT}
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TOPICS: ${KAFKA_TOPICS:-crewing-audit-logs-topic-dev,surveys-audit-log-topic-dev,task-audit-log-topic-dev,gl-notifications-stg}
+      KAFKA_TOPIC_PARTITIONS: ${KAFKA_TOPIC_PARTITIONS:-1}
+      KAFKA_TOPIC_REPLICATION_FACTOR: ${KAFKA_TOPIC_REPLICATION_FACTOR:-1}
+    entrypoint: >
+      sh -ec '
+        /etc/confluent/docker/run &
+        kafka_pid=$$!
+        echo "Waiting for Kafka at localhost:9092..."
+        until kafka-topics --bootstrap-server localhost:9092 --list >/dev/null 2>&1; do
+          if ! kill -0 $$kafka_pid 2>/dev/null; then
+            echo "Kafka process exited before becoming ready"
+            exit 1
+          fi
+          sleep 2
+        done
+        echo "Creating topics: $$KAFKA_TOPICS"
+        OLDIFS="$$IFS"; IFS=","
+        for topic in $$KAFKA_TOPICS; do
+          if [ -n "$$topic" ]; then
+            kafka-topics --create --if-not-exists \
+              --topic "$$topic" \
+              --bootstrap-server localhost:9092 \
+              --partitions "$$KAFKA_TOPIC_PARTITIONS" \
+              --replication-factor "$$KAFKA_TOPIC_REPLICATION_FACTOR"
+          fi
+        done
+        IFS="$$OLDIFS"
+        wait $$kafka_pid
+      '
+    volumes:
+      - poseidon-kafka-data:/var/lib/kafka/data
+    networks:
+      - phoebe-network
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: poseidon-kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "${KAFKA_UI_PORT:-58081}:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: ${KAFKA_UI_BOOTSTRAP_SERVERS:-kafka:29092}
+    volumes:
+      - poseidon-kafka-ui-data:/data
+    networks:
+      - phoebe-network
+
+  argo-db-app:
+    image: sbtscala/scala-sbt:eclipse-temurin-17.0.15_6_1.12.5_2.13.18
+    container_name: argo-db-app
+    depends_on:
+      - postgres
+    environment:
+      DB_URL: ${DB_URL:-jdbc:postgresql://postgres:5432/postgres}
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      ARGO_DB_BRANCH: ${ARGO_DB_BRANCH:-master}
+    working_dir: /argo.db
+    entrypoint: >
+      sh -c "
+        BRANCH=\"$${ARGO_DB_BRANCH:-master}\";
+        if [ ! -d .git ]; then
+          git clone --branch \"$$BRANCH\" git@github.com:Marlow-Navigation/argo.db.git /argo.db;
+        else
+          git fetch origin \"$$BRANCH\" &&
+          git checkout \"$$BRANCH\" &&
+          git pull origin \"$$BRANCH\";
+        fi &&
+        printf 'run --environment dev --action migrate\n' | sbt
+      "
+    volumes:
+      - argo-db-data:/argo.db
+      - ${HOME}/.ssh:/root/.ssh:ro
+    tty: true
+    stdin_open: true
+    networks:
+      - phoebe-network
+
+volumes:
+  poseidon-postgres-data:
+  poseidon-pgadmin-data:
+  poseidon-zookeeper-data:
+  poseidon-kafka-data:
+  poseidon-kafka-ui-data:
+  argo-db-data:
+
+networks:
+  phoebe-network:
+    driver: bridge
