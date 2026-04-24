@@ -19,6 +19,12 @@ services:
     volumes:
       - poseidon-postgres-data:/var/lib/postgresql
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     networks:
       - phoebe-network
 
@@ -118,7 +124,8 @@ services:
     image: sbtscala/scala-sbt:eclipse-temurin-17.0.15_6_1.12.5_2.13.18
     container_name: argo-db-app
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
       DB_URL: ${DB_URL:-jdbc:postgresql://postgres:5432/postgres}
       DB_USERNAME: ${DB_USERNAME:-postgres}
@@ -136,13 +143,69 @@ services:
           git checkout \"$$BRANCH\" &&
           git pull origin \"$$BRANCH\";
         fi &&
-        printf 'run --environment dev --action migrate\n' | sbt
+        STATUS_FILE=/tmp/migration-status &&
+        rm -f \"$$STATUS_FILE\" &&
+        printf 'run --environment dev --action migrate\nexit\n' |
+          sbt 2>&1 |
+          while IFS= read -r line; do
+            echo \"$$line\";
+            case \"$$line\" in
+              *'[success] Total time:'*) echo success > \"$$STATUS_FILE\" ;;
+            esac
+          done;
+        STATUS=\"$$(cat $$STATUS_FILE 2>/dev/null)\";
+        [ \"$$STATUS\" = success ]
       "
     volumes:
       - argo-db-data:/argo.db
       - ${HOME}/.ssh:/root/.ssh:ro
-    tty: true
-    stdin_open: true
+    networks:
+      - phoebe-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: poseidon-jaeger
+    profiles:
+      - tracing
+    ports:
+      - "${JAEGER_UI_PORT:-16686}:16686"
+      - "${JAEGER_OTLP_PORT:-4318}:4318"
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - phoebe-network
+
+  alcyone-api:
+    image: alcyone-api:latest
+    container_name: poseidon-alcyone-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      argo-db-app:
+        condition: service_completed_successfully
+    ports:
+      - "${ALCYONE_PORT:-8081}:8081"
+    env_file:
+      - ./.env
+      - ./alcyone.env
+    environment:
+      # Keep container-safe defaults even when alcyone.env is host-oriented.
+      DB_URL: ${ALCYONE_DB_URL:-jdbc:postgresql://postgres:5432/postgres}
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      KAFKA_BOOTSTRAP_SERVERS: ${ALCYONE_KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+      PORT: ${ALCYONE_PORT:-8081}
+      OTEL_JAVAAGENT_ENABLED: ${OTEL_JAVAAGENT_ENABLED:-false}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-alcyone-api-compose}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4318}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-none}
+      OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-none}
+      OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-none}
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      OTEL_TRACES_SAMPLER_ARG: ${TRACING_SAMPLING_PROBABILITY:-1.0}
     networks:
       - phoebe-network
 
