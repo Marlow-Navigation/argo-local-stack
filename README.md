@@ -1,4 +1,4 @@
-# marlow-dev-stack
+# argo-local-stack
 
 Local development infrastructure for Marlow backend services. Spins up Postgres, Kafka, and the Argo DB migration runner so you can run services like Phoebe and Alcyone locally without fiddling with external environments.
 
