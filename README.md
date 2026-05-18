@@ -28,7 +28,9 @@ Kafka UI at [http://localhost:58081](http://localhost:58081).
 
 ## Environment variables
 
-All config lives in `.env` at the repo root. The defaults are sensible for local dev — you probably don't need to change anything unless you have port conflicts.
+Core infra config lives in `.env` at the repo root. The defaults are sensible for local dev — you probably don't need to change anything unless you have port conflicts.
+
+For `alcyone-api`, compose also loads `alcyone.env` via `env_file`. Precedence is: explicit `environment` values in `docker-compose.yaml` > `alcyone.env` > `.env`.
 
 ### Core database
 
