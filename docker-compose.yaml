@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
 
   postgres:
@@ -18,6 +16,7 @@ services:
       - wal_level=logical
     volumes:
       - poseidon-postgres-data:/var/lib/postgresql
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
     restart: unless-stopped
     networks:
       - phoebe-network
@@ -124,27 +123,180 @@ services:
       DB_USERNAME: ${DB_USERNAME:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_PORT: ${DB_PORT:-5432}
-      ARGO_DB_BRANCH: ${ARGO_DB_BRANCH:-master}
     working_dir: /argo.db
-    entrypoint: >
-      sh -c "
-        BRANCH=\"$${ARGO_DB_BRANCH:-master}\";
-        if [ ! -d .git ]; then
-          git clone --branch \"$$BRANCH\" git@github.com:Marlow-Navigation/argo.db.git /argo.db;
-        else
-          git fetch origin \"$$BRANCH\" &&
-          git checkout \"$$BRANCH\" &&
-          git pull origin \"$$BRANCH\";
-        fi &&
-        printf 'run --environment dev --action migrate\n' | sbt
-      "
+    # Source is bind-mounted from ../argo.db on host. Checkout/edit/switch branches on the host;
+    # run this service to apply migrations. First run compiles SBT (~2-3 min); subsequent runs reuse
+    # the host ~/.sbt cache and local target/ directory.
+    # Uses --environment stg: argo.db's `dev` profile has a hardcoded 0.0.0.0 URL that can't
+    # be overridden (until upstream PR #478 lands). `stg` reads DB_URL from env and runs an
+    # afterMigrate callback that GRANTs to users/db that we pre-create via
+    # docker/postgres-init/01-argodb-users.sql.
+    entrypoint: ["sbt", "-batch", "run --environment stg --action migrate"]
     volumes:
-      - argo-db-data:/argo.db
-      - ${HOME}/.ssh:/root/.ssh:ro
-    tty: true
-    stdin_open: true
+      - ../argo.db:/argo.db
+      - argo-db-sbt-cache:/root/.sbt
+      - argo-db-ivy-cache:/root/.ivy2
     networks:
       - phoebe-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: phoebe-jaeger
+    ports:
+      - "16686:16686"  # UI
+      - "14268:14268"  # collector HTTP
+    networks:
+      - phoebe-network
+
+  crewing:
+    build:
+      context: ../phoebe
+      dockerfile: ../marlow-dev-stack/docker/crewing.Dockerfile
+      args:
+        DOCKER_TAG: ${DOCKER_TAG:-1.0.570}
+        NEXUS_REPO: ${NEXUS_REPO:-nexus.marecrew.com}
+      secrets:
+        - m2-settings
+    image: marlow/phoebe-crewing:local
+    container_name: phoebe-crewing
+    depends_on:
+      - postgres
+      - kafka
+      - jaeger
+    ports:
+      - "${CREWING_PORT:-8081}:8080"
+    environment:
+      # Spring profile
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
+      DOCKER_TAG: ${DOCKER_TAG:-1.0.570}
+      # DB (local dockerised postgres)
+      DB_DRIVER: ${DB_DRIVER:-org.postgresql.Driver}
+      DB_URL: ${DB_URL:-jdbc:postgresql://postgres:5432/postgres}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_SCHEMA: ${DB_SCHEMA:-crewing}
+      DB_THREAD_POOL_SIZE: ${DB_THREAD_POOL_SIZE:-32}
+      # Kafka (local dockerised, PLAINTEXT)
+      KAFKA_SECURITY_PROTOCOL: ${KAFKA_SECURITY_PROTOCOL:-PLAINTEXT}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+      KAFKA_SSL_TRUSTSTORE_LOCATION: ${KAFKA_SSL_TRUSTSTORE_LOCATION:-}
+      KAFKA_SSL_TRUSTSTORE_PASSWORD: ${KAFKA_SSL_TRUSTSTORE_PASSWORD:-}
+      KAFKA_SSL_KEYSTORE_LOCATION: ${KAFKA_SSL_KEYSTORE_LOCATION:-}
+      KAFKA_SSL_KEYSTORE_PASSWORD: ${KAFKA_SSL_KEYSTORE_PASSWORD:-}
+      SSL_KEY_PASSWORD: ${SSL_KEY_PASSWORD:-}
+      AUDIT_EVENTS_TOPIC: ${AUDIT_EVENTS_TOPIC:-crewing-audit-logs-topic-dev}
+      KAFKA_AUDIT_LOGS_TOPIC_NAME: ${KAFKA_AUDIT_LOGS_TOPIC_NAME:-crewing-audit-logs-topic-dev}
+      # Tracing
+      JAEGER_HOST: ${JAEGER_HOST:-jaeger}
+      JAEGER_PORT: ${JAEGER_PORT:-14268}
+      JAEGER_PROTOCOL: ${JAEGER_PROTOCOL:-http}
+      # Staging service URLs (the "everything else on staging" part)
+      CORE_URL: ${CORE_URL}
+      CORE_API_KEY: ${CORE_API_KEY:-}
+      FALLBACK_URL: ${FALLBACK_URL}
+      POSEIDON_IO_URL: ${POSEIDON_IO_URL}
+      POSEIDON_KHARON_URL: ${POSEIDON_KHARON_URL}
+      POSEIDON_MISC_URL: ${POSEIDON_MISC_URL}
+      PS_HERMES_URL: ${PS_HERMES_URL}
+      CREW_COMPANION_URL: ${CREW_COMPANION_URL}
+      API_VERSION: ${API_VERSION}
+      TASK_MANAGEMENT_URL: ${TASK_MANAGEMENT_URL}
+      DOCUMENT_SERVICE_URL: ${DOCUMENT_SERVICE_URL}
+      CLIENT_PORTAL_BASE_URL: ${CLIENT_PORTAL_BASE_URL}
+      FLAG_CHARGES_URL: ${FLAG_CHARGES_URL}
+      FLAG_CHARGES_API_KEY: ${FLAG_CHARGES_API_KEY:-}
+      FUZZY_SEARCH_URL: ${FUZZY_SEARCH_URL}
+      FUZZY_SEARCH_API_KEY: ${FUZZY_SEARCH_API_KEY:-}
+      FUZZY_SEARCH_THRESHOLD: ${FUZZY_SEARCH_THRESHOLD:-80}
+      FUZZY_SEARCH_LIMIT: ${FUZZY_SEARCH_LIMIT:-50}
+      RELATIVE_WORKFLOW_URL: ${RELATIVE_WORKFLOW_URL:-test}
+      # SSO
+      PEM_KEY: ${PEM_KEY}
+      REALM_CLIENT: ${REALM_CLIENT:-cerberus}
+      SSO_AUTH_VALIDATOR_URL: ${SSO_AUTH_VALIDATOR_URL}
+      SSO_ODYSSEY_ISSUER_URL: ${SSO_ODYSSEY_ISSUER_URL}
+      SSO_SEAFARER_ISSUER_URL: ${SSO_SEAFARER_ISSUER_URL}
+      SSO_CREWAPI_ISSUER_URL: ${SSO_CREWAPI_ISSUER_URL}
+      SSO_CLIENT_ISSUER_URL: ${SSO_CLIENT_ISSUER_URL}
+      SSO_VESSEL_ISSUER_URL: ${SSO_VESSEL_ISSUER_URL}
+      SSO_REALM_LOGIN_URL: ${SSO_REALM_LOGIN_URL}
+      PS_AUTH_SA_LOGIN: ${PS_AUTH_SA_LOGIN}
+      CREWING_SSO_SA_KEY: ${CREWING_SSO_SA_KEY:-}
+      CREWING_INTERNAL_API_KEY: ${CREWING_INTERNAL_API_KEY:-}
+      CREWING_DEFAULT_ORACLE_IDENTITY: ${CREWING_DEFAULT_ORACLE_IDENTITY:-}
+      CREWING_DEFAULT_ORACLE_GROUP: ${CREWING_DEFAULT_ORACLE_GROUP:-}
+    networks:
+      - phoebe-network
+
+  alcyone:
+    build:
+      context: ../alcyone
+      dockerfile: ../marlow-dev-stack/docker/alcyone.Dockerfile
+      args:
+        DOCKER_TAG: ${ALCYONE_DOCKER_TAG:-1.0.0}
+        NEXUS_REPO: ${NEXUS_REPO:-nexus.marecrew.com}
+      secrets:
+        - m2-settings
+    image: marlow/alcyone-api:local
+    container_name: alcyone-api
+    depends_on:
+      - postgres
+      - kafka
+      - jaeger
+    ports:
+      - "${ALCYONE_PORT:-8082}:8081"
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-dev}
+      DOCKER_TAG: ${ALCYONE_DOCKER_TAG:-1.0.0}
+      # DB
+      DB_DRIVER: ${DB_DRIVER:-org.postgresql.Driver}
+      DB_URL: ${DB_URL:-jdbc:postgresql://postgres:5432/postgres}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_SCHEMA: ${ALCYONE_DB_SCHEMA:-debriefing}
+      DB_THREAD_POOL_SIZE: ${DB_THREAD_POOL_SIZE:-32}
+      # Kafka
+      KAFKA_SECURITY_PROTOCOL: ${KAFKA_SECURITY_PROTOCOL:-PLAINTEXT}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+      KAFKA_SSL_TRUSTSTORE_LOCATION: ${KAFKA_SSL_TRUSTSTORE_LOCATION:-}
+      KAFKA_SSL_TRUSTSTORE_PASSWORD: ${KAFKA_SSL_TRUSTSTORE_PASSWORD:-}
+      KAFKA_SSL_KEYSTORE_LOCATION: ${KAFKA_SSL_KEYSTORE_LOCATION:-}
+      KAFKA_SSL_KEYSTORE_PASSWORD: ${KAFKA_SSL_KEYSTORE_PASSWORD:-}
+      SSL_KEY_PASSWORD: ${SSL_KEY_PASSWORD:-}
+      GL_NOTIFICATIONS_TOPIC: ${GL_NOTIFICATIONS_TOPIC:-gl-notifications-stg}
+      GL_INBOUND_MAIN_TOPIC: ${GL_INBOUND_MAIN_TOPIC:-gl-inbound-main-topic-dev}
+      GL_INBOUND_MAIN_DLQ: ${GL_INBOUND_MAIN_DLQ:-gl-inbound-main-dlq-dev}
+      SURVEYS_AUDIT_LOGS_TOPIC: ${SURVEYS_AUDIT_LOGS_TOPIC:-surveys-audit-log-topic-dev}
+      # Services (staging for other modules)
+      ALCYONE_FILE_SERVICE: ${ALCYONE_FILE_SERVICE:-https://alcyone-api-stg.marecrew.com}
+      ALCYONE_GATEWAY_SERVICE: ${ALCYONE_GATEWAY_SERVICE:-https://phoebe-stg.marecrew.com}
+      CORE_URL: ${CORE_URL}
+      CREWING_URL: ${CREWING_URL:-http://crewing:8080}
+      POSEIDON_IO_URL: ${POSEIDON_IO_URL}
+      TASK_MANAGEMENT_URL: ${TASK_MANAGEMENT_URL}
+      # SSO
+      PEM_KEY: ${PEM_KEY}
+      REALM_CLIENT: ${REALM_CLIENT:-cerberus}
+      SSO_AUTH_VALIDATOR_URL: ${SSO_AUTH_VALIDATOR_URL}
+      SSO_ODYSSEY_ISSUER_URL: ${SSO_ODYSSEY_ISSUER_URL}
+      SSO_SEAFARER_ISSUER_URL: ${SSO_SEAFARER_ISSUER_URL}
+      SSO_REALM_LOGIN_URL: ${SSO_REALM_LOGIN_URL}
+      PS_AUTH_SA_LOGIN: ${PS_AUTH_SA_LOGIN}
+      KEYCLOAK_SSO_ENDPOINT: ${KEYCLOAK_SSO_ENDPOINT:-https://keycloak.marecrew.com/realms/odyssey/protocol/openid-connect/token}
+      SURVEYS_INTERNAL_SA: ${SURVEYS_INTERNAL_SA:-}
+      CREW_APP_URL: ${CREW_APP_URL:-http://localhost:3001}
+      # Alcyone debriefing feature flag (referenced as ${migration_debriefing} in application.yml)
+      migration_debriefing: ${migration_debriefing:-}
+      # Oracle
+      ENABLE_ORACLE_CALLS: ${ENABLE_ORACLE_CALLS:-false}
+      CREWING_DEFAULT_ORACLE_IDENTITY: ${CREWING_DEFAULT_ORACLE_IDENTITY:-}
+      CREWING_DEFAULT_ORACLE_GROUP: ${CREWING_DEFAULT_ORACLE_GROUP:-}
+    networks:
+      - phoebe-network
+
+secrets:
+  m2-settings:
+    file: ${HOME}/.m2/settings.xml
 
 volumes:
   poseidon-postgres-data:
@@ -152,7 +304,8 @@ volumes:
   poseidon-zookeeper-data:
   poseidon-kafka-data:
   poseidon-kafka-ui-data:
-  argo-db-data:
+  argo-db-sbt-cache:
+  argo-db-ivy-cache:
 
 networks:
   phoebe-network:

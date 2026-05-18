@@ -1,0 +1,7 @@
+.env.local
+.env.local.*
+*.secrets
+
+# but DO commit the templates
+!.env.local.example
+!themis.env.local.example
