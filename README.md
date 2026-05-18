@@ -13,6 +13,20 @@ Local development infrastructure for Marlow backend services. Spins up Postgres,
 | **Kafka UI** | `poseidon-kafka-ui` | `58081` | Web UI for inspecting topics and messages |
 | **Argo DB** | `argo-db-app` | — | Clones `argo.db` and runs SBT migrations against Postgres |
 
+### Phoebe services (profile: `phoebe`)
+
+| Service | Container | Port | Module |
+|---|---|---|---|
+| **Crewing** | `poseidon-phoebe-crewing` | `8090` | crewing |
+| **Training** | `poseidon-phoebe-training` | `8091` | training |
+| **Document** | `poseidon-phoebe-document` | `8092` | document |
+| **Task Management** | `poseidon-phoebe-task-management` | `8093` | task-management |
+| **Audit Logs** | `poseidon-phoebe-audit-logs` | `8094` | audit-logs |
+| **User Management** | `poseidon-phoebe-user-management` | `8095` | user-management |
+| **Imports** | `poseidon-phoebe-imports` | `8096` | imports |
+| **Insurance** | `poseidon-phoebe-insurance` | `8097` | insurance |
+| **Integration Client** | `poseidon-phoebe-integration-client` | `8098` | integration-client |
+
 ## Getting started
 
 ```bash
@@ -60,6 +74,44 @@ docker compose up -d alcyone-api
 ```
 
 This automatically starts `postgres`, `kafka`, `zookeeper`, and `argo-db-app` because of the declared `depends_on` chain.
+
+### Phoebe services
+
+Phoebe services are behind the `phoebe` profile and won't start unless you explicitly enable it.
+
+#### Building images
+
+Each Phoebe module has its own Dockerfile. Build from the phoebe repo root:
+
+```bash
+cd /path/to/backends/phoebe
+
+# Build a single module (e.g., crewing)
+mvn package -pl crewing -am -DskipTests
+cd crewing && docker build --build-arg DOCKER_TAG=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout) -t phoebe-crewing:latest .
+
+# Or build all modules at once
+mvn package -DskipTests
+for module in crewing training document task-management audit-logs user-management imports insurance integration-client; do
+  VERSION=$(cd "$module" && mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+  docker build --build-arg DOCKER_TAG="$VERSION" -t "phoebe-$module:latest" "$module"
+done
+```
+
+#### Running
+
+```bash
+# All phoebe services (infra starts automatically via depends_on)
+docker compose --profile phoebe up -d
+
+# Just one service
+docker compose --profile phoebe up -d phoebe-crewing
+
+# A few services
+docker compose --profile phoebe up -d phoebe-crewing phoebe-task-management phoebe-audit-logs
+```
+
+Each service has its own env file (`phoebe-<module>.env`). Edit those to configure DB schemas, Kafka topics, SSO endpoints, etc.
 
 ### Jaeger (tracing)
 
@@ -177,12 +229,12 @@ docker compose up -d argo-db-app
 
 ## Backend services
 
-The actual application code lives in `backends/`. These aren't managed by this compose file — you run them from your IDE or command line as usual. This repo just provides the infrastructure they depend on.
+The actual application code lives in `backends/`. Alcyone can be run via `docker compose up -d alcyone-api`. Phoebe services can be run via `docker compose --profile phoebe up -d` after building their images locally.
 
-| Directory | What it is |
-|---|---|
-| `alcyone/` | Alcyone API — Spring Boot service (surveys/debriefings) |
-| `phoebe/` | Phoebe — multi-module monolith (crewing, auth, audit-logs, training, documents, etc.) |
+| Directory | What it is | How to run |
+|---|---|---|
+| `alcyone/` | Alcyone API — Spring Boot service (surveys/debriefings) | `docker compose up -d alcyone-api` |
+| `phoebe/` | Phoebe — multi-module monolith (crewing, auth, audit-logs, training, documents, etc.) | `docker compose --profile phoebe up -d` |
 
 ## Troubleshooting
 

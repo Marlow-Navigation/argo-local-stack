@@ -209,6 +209,226 @@ services:
     networks:
       - phoebe-network
 
+  # ─── Phoebe Services (profile: phoebe) ───────────────────────────────────────
+
+  phoebe-crewing:
+    image: phoebe-crewing:latest
+    container_name: poseidon-phoebe-crewing
+    profiles:
+      - phoebe
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      argo-db-app:
+        condition: service_completed_successfully
+    ports:
+      - "${PHOEBE_CREWING_PORT:-8090}:8080"
+    env_file:
+      - ./.env
+      - ./phoebe-crewing.env
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/postgres
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      TASK_MANAGEMENT_URL: http://phoebe-task-management:8080
+      DOCUMENT_SERVICE_URL: http://phoebe-document:8080
+    networks:
+      - phoebe-network
+
+  phoebe-training:
+    image: phoebe-training:latest
+    container_name: poseidon-phoebe-training
+    profiles:
+      - phoebe
+    depends_on:
+      postgres:
+        condition: service_healthy
+      argo-db-app:
+        condition: service_completed_successfully
+    ports:
+      - "${PHOEBE_TRAINING_PORT:-8091}:8080"
+    env_file:
+      - ./.env
+      - ./phoebe-training.env
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/postgres
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      CREWING_URL: http://phoebe-crewing:8080
+    networks:
+      - phoebe-network
+
+  phoebe-document:
+    image: phoebe-document:latest
+    container_name: poseidon-phoebe-document
+    profiles:
+      - phoebe
+    depends_on:
+      postgres:
+        condition: service_healthy
+      argo-db-app:
+        condition: service_completed_successfully
+    ports:
+      - "${PHOEBE_DOCUMENT_PORT:-8092}:8080"
+    env_file:
+      - ./.env
+      - ./phoebe-document.env
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/postgres
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      CREWING_URL: http://phoebe-crewing:8080
+    networks:
+      - phoebe-network
+
+  phoebe-task-management:
+    image: phoebe-task-management:latest
+    container_name: poseidon-phoebe-task-management
+    profiles:
+      - phoebe
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      argo-db-app:
+        condition: service_completed_successfully
+    ports:
+      - "${PHOEBE_TASK_MANAGEMENT_PORT:-8093}:8080"
+    env_file:
+      - ./.env
+      - ./phoebe-task-management.env
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/postgres
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      CREWING_URL: http://phoebe-crewing:8080
+    networks:
+      - phoebe-network
+
+  phoebe-audit-logs:
+    image: phoebe-audit-logs:latest
+    container_name: poseidon-phoebe-audit-logs
+    profiles:
+      - phoebe
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      argo-db-app:
+        condition: service_completed_successfully
+    ports:
+      - "${PHOEBE_AUDIT_LOGS_PORT:-8094}:8080"
+    env_file:
+      - ./.env
+      - ./phoebe-audit-logs.env
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/postgres
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    networks:
+      - phoebe-network
+
+  phoebe-user-management:
+    image: phoebe-user-management:latest
+    container_name: poseidon-phoebe-user-management
+    profiles:
+      - phoebe
+    depends_on:
+      postgres:
+        condition: service_healthy
+      argo-db-app:
+        condition: service_completed_successfully
+    ports:
+      - "${PHOEBE_USER_MANAGEMENT_PORT:-8095}:8080"
+    env_file:
+      - ./.env
+      - ./phoebe-user-management.env
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/postgres
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    networks:
+      - phoebe-network
+
+  phoebe-imports:
+    image: phoebe-imports:latest
+    container_name: poseidon-phoebe-imports
+    profiles:
+      - phoebe
+    depends_on:
+      postgres:
+        condition: service_healthy
+      argo-db-app:
+        condition: service_completed_successfully
+    ports:
+      - "${PHOEBE_IMPORTS_PORT:-8096}:8080"
+    env_file:
+      - ./.env
+      - ./phoebe-imports.env
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/postgres
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      CREWING_URL: http://phoebe-crewing:8080
+    networks:
+      - phoebe-network
+
+  phoebe-insurance:
+    image: phoebe-insurance:latest
+    container_name: poseidon-phoebe-insurance
+    profiles:
+      - phoebe
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      argo-db-app:
+        condition: service_completed_successfully
+    ports:
+      - "${PHOEBE_INSURANCE_PORT:-8097}:8080"
+    env_file:
+      - ./.env
+      - ./phoebe-insurance.env
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/postgres
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      INTEGRATION_CLIENT_URL: http://phoebe-integration-client:8080
+      CREWING_URL: http://phoebe-crewing:8080
+    networks:
+      - phoebe-network
+
+  phoebe-integration-client:
+    image: phoebe-integration-client:latest
+    container_name: poseidon-phoebe-integration-client
+    profiles:
+      - phoebe
+    depends_on:
+      postgres:
+        condition: service_healthy
+      argo-db-app:
+        condition: service_completed_successfully
+    ports:
+      - "${PHOEBE_INTEGRATION_CLIENT_PORT:-8098}:8080"
+    env_file:
+      - ./.env
+      - ./phoebe-integration-client.env
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/postgres
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    networks:
+      - phoebe-network
+
 volumes:
   poseidon-postgres-data:
   poseidon-pgadmin-data:
