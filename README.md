@@ -26,6 +26,79 @@ podman-compose up -d
 pgAdmin will be available at [http://localhost:58080](http://localhost:58080) (login: `admin@local.dev` / `admin`).
 Kafka UI at [http://localhost:58081](http://localhost:58081).
 
+## Running individual services
+
+You don't have to bring up the entire stack every time. Use `docker compose up -d` with specific service names to start only what you need.
+
+### Database only (Postgres + pgAdmin)
+
+```bash
+docker compose up -d postgres pgadmin
+```
+
+### Kafka only (Zookeeper + Kafka + Kafka UI)
+
+```bash
+docker compose up -d zookeeper kafka kafka-ui
+```
+
+### Database + migrations (Postgres + Argo DB)
+
+```bash
+docker compose up -d postgres argo-db-app
+```
+
+> `argo-db-app` depends on `postgres` being healthy, so Postgres will start automatically even if you only specify `argo-db-app`:
+> ```bash
+> docker compose up -d argo-db-app
+> ```
+
+### Alcyone API (with all its dependencies)
+
+```bash
+docker compose up -d alcyone-api
+```
+
+This automatically starts `postgres`, `kafka`, `zookeeper`, and `argo-db-app` because of the declared `depends_on` chain.
+
+### Jaeger (tracing)
+
+Jaeger is behind a profile and won't start unless you explicitly enable it:
+
+```bash
+docker compose --profile tracing up -d jaeger
+```
+
+### Mix and match
+
+Combine any services you need:
+
+```bash
+# Postgres + Kafka (no UI tools, no migrations)
+docker compose up -d postgres zookeeper kafka
+
+# Everything except Alcyone
+docker compose up -d postgres pgadmin zookeeper kafka kafka-ui argo-db-app
+```
+
+### Restart a single service without touching others
+
+```bash
+docker compose up -d --force-recreate --no-deps <service>
+```
+
+### Stop a single service
+
+```bash
+docker compose stop <service>
+```
+
+### View logs for a specific service
+
+```bash
+docker compose logs -f <service>
+```
+
 ## Environment variables
 
 Core infra config lives in `.env` at the repo root. The defaults are sensible for local dev — you probably don't need to change anything unless you have port conflicts.
