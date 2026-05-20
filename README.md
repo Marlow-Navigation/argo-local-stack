@@ -70,6 +70,60 @@ This automatically starts `postgres`, `kafka`, `zookeeper`, and `argo-db-app` be
 Jaeger is behind a profile and won't start unless you explicitly enable it:
 
 
+## Building and tagging images
+
+The compose file references locally-built images (e.g. `alcyone-api:latest`, `phoebe-crewing:latest`). You must build the JAR and Docker image locally before starting a service.
+
+### Alcyone
+
+```bash
+cd /path/to/alcyone
+
+# Build the JAR (DOCKER_TAG sets the Maven version)
+export DOCKER_TAG=latest
+./mvnw clean package -DskipTests
+
+# Build and tag the Docker image
+docker build \
+  --build-arg DOCKER_TAG=latest \
+  --build-arg APP_NAME=api \
+  --build-arg EXPOSED_PORT=8081 \
+  -t alcyone-api:latest .
+```
+
+### Phoebe
+
+Phoebe is a multi-module Maven project. Build the entire project first, then build the image for each module you need.
+
+```bash
+cd /path/to/phoebe
+
+# Build all modules
+export DOCKER_TAG=latest
+./mvnw clean package -DskipTests
+
+# Build a specific module image (e.g. crewing)
+docker build \
+  --build-arg DOCKER_TAG=latest \
+  -t phoebe-crewing:latest crewing/
+```
+
+Repeat for any module you want to run:
+
+| Module | Build context | Image tag |
+|---|---|---|
+| crewing | `crewing/` | `phoebe-crewing:latest` |
+| training | `training/` | `phoebe-training:latest` |
+| document | `document/` | `phoebe-document:latest` |
+| task-management | `task-management/` | `phoebe-task-management:latest` |
+| audit-logs | `audit-logs/` | `phoebe-audit-logs:latest` |
+| user-management | `user-management/` | `phoebe-user-management:latest` |
+| imports | `imports/` | `phoebe-imports:latest` |
+| insurance | `insurance/` | `phoebe-insurance:latest` |
+| integration-client | `integration-client/` | `phoebe-integration-client:latest` |
+
+---
+
 ## Fine tune this stack
 
 ### Running individual services

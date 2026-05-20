@@ -220,6 +220,7 @@ services:
       - "${PHOEBE_CREWING_PORT:-8090}:8080"
     env_file:
       - ./.env
+      - ./phoebe-common.env
       - ./phoebe-crewing.env
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/postgres
@@ -245,6 +246,7 @@ services:
       - "${PHOEBE_TRAINING_PORT:-8091}:8080"
     env_file:
       - ./.env
+      - ./phoebe-common.env
       - ./phoebe-training.env
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/postgres
@@ -268,6 +270,7 @@ services:
       - "${PHOEBE_DOCUMENT_PORT:-8092}:8080"
     env_file:
       - ./.env
+      - ./phoebe-common.env
       - ./phoebe-document.env
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/postgres
@@ -293,6 +296,7 @@ services:
       - "${PHOEBE_TASK_MANAGEMENT_PORT:-8093}:8080"
     env_file:
       - ./.env
+      - ./phoebe-common.env
       - ./phoebe-task-management.env
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/postgres
@@ -319,6 +323,7 @@ services:
       - "${PHOEBE_AUDIT_LOGS_PORT:-8094}:8080"
     env_file:
       - ./.env
+      - ./phoebe-common.env
       - ./phoebe-audit-logs.env
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/postgres
@@ -342,6 +347,7 @@ services:
       - "${PHOEBE_USER_MANAGEMENT_PORT:-8095}:8080"
     env_file:
       - ./.env
+      - ./phoebe-common.env
       - ./phoebe-user-management.env
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/postgres
@@ -364,6 +370,7 @@ services:
       - "${PHOEBE_IMPORTS_PORT:-8096}:8080"
     env_file:
       - ./.env
+      - ./phoebe-common.env
       - ./phoebe-imports.env
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/postgres
@@ -389,6 +396,7 @@ services:
       - "${PHOEBE_INSURANCE_PORT:-8097}:8080"
     env_file:
       - ./.env
+      - ./phoebe-common.env
       - ./phoebe-insurance.env
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/postgres
@@ -414,6 +422,7 @@ services:
       - "${PHOEBE_INTEGRATION_CLIENT_PORT:-8098}:8080"
     env_file:
       - ./.env
+      - ./phoebe-common.env
       - ./phoebe-integration-client.env
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/postgres
