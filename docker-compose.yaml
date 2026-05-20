@@ -178,6 +178,8 @@ services:
   alcyone-api:
     image: alcyone-api:latest
     container_name: poseidon-alcyone-api
+    profiles:
+      - alcyone
     depends_on:
       postgres:
         condition: service_healthy
@@ -197,15 +199,6 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       KAFKA_BOOTSTRAP_SERVERS: ${ALCYONE_KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
       PORT: ${ALCYONE_PORT:-8081}
-      OTEL_JAVAAGENT_ENABLED: ${OTEL_JAVAAGENT_ENABLED:-false}
-      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-alcyone-api-compose}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4318}
-      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
-      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-none}
-      OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-none}
-      OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-none}
-      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
-      OTEL_TRACES_SAMPLER_ARG: ${TRACING_SAMPLING_PROBABILITY:-1.0}
     networks:
       - phoebe-network
 
@@ -436,6 +429,8 @@ volumes:
   poseidon-kafka-data:
   poseidon-kafka-ui-data:
   argo-db-data:
+  poseidon-prometheus-data:
+  poseidon-grafana-data:
 
 networks:
   phoebe-network:

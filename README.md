@@ -2,7 +2,32 @@
 
 Local development infrastructure for Marlow backend services. Spins up Postgres, Kafka, and the Argo DB migration runner so you can run services like Phoebe and Alcyone locally without fiddling with external environments.
 
-## What's in the box
+# Quick setup for local development
+
+Run docker compose up to start the infrastructure stack
+
+``` bash
+docker compose up -d 
+```
+
+### how run a argodb branch
+
+By default the argo-db-app container clones the `master` branch of the `argo.db` repo and runs migrations from there. To point it at a different branch (e.g., for testing a feature branch with new migrations), set the `ARGO_DB_BRANCH` environment variable:
+The variable can be set in the `.env` file or passed inline when starting the container.
+
+```bash
+ARGO_DB_BRANCH=feature/your-branch docker compose up -d --force-recreate --no-deps argo-db-app
+```
+
+### how to add a kafka topic
+
+To add a new Kafka topic, set the `KAFKA_TOPICS` environment variable in your `.env` file to include the new topic name.
+
+
+```bash
+
+
+### Core infrastructure services and ports
 
 | Service | Container | Port | What it does |
 |---|---|---|---|
@@ -40,7 +65,10 @@ podman-compose up -d
 pgAdmin will be available at [http://localhost:58080](http://localhost:58080) (login: `admin@local.dev` / `admin`).
 Kafka UI at [http://localhost:58081](http://localhost:58081).
 
-## Running individual services
+
+## Fine tune this stack
+
+### Running individual services
 
 You don't have to bring up the entire stack every time. Use `docker compose up -d` with specific service names to start only what you need.
 
