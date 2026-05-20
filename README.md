@@ -4,6 +4,30 @@ Local development infrastructure for Marlow backend services. Spins up Postgres,
 
 # Quick setup for local development
 
+### SSH key for argo.db
+
+The `argo-db-app` container clones `git@github.com:Marlow-Navigation/argo.db.git` over SSH by mounting your host's `~/.ssh` directory read-only. You need an SSH key with access to the `Marlow-Navigation/argo.db` repo.
+
+**Generate a key** (skip if you already have one):
+```bash
+ssh-keygen -t ed25519 -C "your-email@example.com"
+```
+
+**Add the public key to GitHub**:
+1. Copy the public key:
+   ```bash
+   cat ~/.ssh/id_ed25519.pub
+   ```
+2. Go to [GitHub → Settings → SSH and GPG keys](https://github.com/settings/keys)
+3. Click **New SSH key**, paste the key, and save
+
+**Verify access**:
+```bash
+ssh -T git@github.com
+```
+
+### Start the stack
+
 Run docker compose up to start the infrastructure stack
 
 ``` bash
