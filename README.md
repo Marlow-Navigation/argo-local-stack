@@ -36,6 +36,11 @@ To add a new Kafka topic, set the `KAFKA_TOPICS` environment variable in your `.
 | **Kafka UI** | `poseidon-kafka-ui` | `58081` | Web UI for inspecting topics and messages |
 | **Argo DB** | `argo-db-app` | — | Clones `argo.db` and runs SBT migrations against Postgres |
 
+
+## Profiles
+
+Profile helps to bring up related services together. For example, all Phoebe modules are behind the `phoebe` profile, so you can start them all with a single command without having to specify each one.
+
 ### Phoebe services (profile: `phoebe`)
 
 | Service | Container | Port | Module |
@@ -50,18 +55,19 @@ To add a new Kafka topic, set the `KAFKA_TOPICS` environment variable in your `.
 | **Insurance** | `poseidon-phoebe-insurance` | `8097` | insurance |
 | **Integration Client** | `poseidon-phoebe-integration-client` | `8098` | integration-client |
 
-## Getting started
 
-```bash
-# bring everything up
-docker compose up -d
+### Alcyone services (profile: `alcyone`)
 
-# or if you're on podman
-podman-compose up -d
-```
+This automatically starts `postgres`, `kafka`, `zookeeper`, and `argo-db-app` because of the declared `depends_on` chain.
 
-pgAdmin will be available at [http://localhost:58080](http://localhost:58080) (login: `admin@local.dev` / `admin`).
-Kafka UI at [http://localhost:58081](http://localhost:58081).
+| Service | Container | Port | Module |
+|---|---|---|---|
+| **Alcyone API** | `poseidon-alcyone-api` | `8080` | Spring Boot service for surveys and debriefings |
+
+
+### Jaeger (tracing)
+
+Jaeger is behind a profile and won't start unless you explicitly enable it:
 
 
 ## Fine tune this stack
@@ -92,18 +98,6 @@ docker compose up -d postgres argo-db-app
 > ```bash
 > docker compose up -d argo-db-app
 > ```
-
-### Alcyone API (with all its dependencies)
-
-```bash
-docker compose up -d alcyone-api
-```
-
-This automatically starts `postgres`, `kafka`, `zookeeper`, and `argo-db-app` because of the declared `depends_on` chain.
-
-### Phoebe services
-
-Phoebe services are behind the `phoebe` profile and won't start unless you explicitly enable it.
 
 #### Building images
 
@@ -138,10 +132,6 @@ docker compose --profile phoebe up -d phoebe-crewing phoebe-task-management phoe
 ```
 
 Each service has its own env file (`phoebe-<module>.env`). Edit those to configure DB schemas, Kafka topics, SSO endpoints, etc.
-
-### Jaeger (tracing)
-
-Jaeger is behind a profile and won't start unless you explicitly enable it:
 
 ```bash
 docker compose --profile tracing up -d jaeger
@@ -212,47 +202,6 @@ For `alcyone-api`, compose also loads `alcyone.env` via `env_file`. Precedence i
 
 The Kafka listener config (`KAFKA_LISTENERS`, `KAFKA_ADVERTISED_LISTENERS`, etc.) is set up so that containers talk to Kafka on `kafka:29092` and your host machine connects via `localhost:9092`. Unless you're doing something unusual, leave these alone.
 
-### Argo DB
-
-| Variable | Default | Notes |
-|---|---|---|
-| `ARGO_DB_BRANCH` | `master` | Branch of `argo.db` to clone and run migrations from |
-| `DB_URL` | `jdbc:postgresql://postgres:5432/postgres` | JDBC URL for the migration target |
-| `DB_USERNAME` | `postgres` | |
-| `DB_PASSWORD` | `postgres` | |
-
-## The `ARGO_DB_BRANCH` variable
-
-This one matters. The `argo-db-app` container clones the [argo.db](https://github.com/Marlow-Navigation/argo.db) repo on startup and runs SBT migrations against your local Postgres. The `ARGO_DB_BRANCH` variable controls which branch gets checked out.
-
-By default it points at `master`, but you'll want to change this when:
-
-- **You're working on a feature that requires schema changes** — point it at the feature branch in `argo.db` that has your migrations, so your local DB matches what your code expects.
-- **You need to test someone else's migration** — just set the branch to theirs and restart the container.
-- **Something broke** — if your local DB is in a weird state, you can nuke the `argo-db-data` volume and re-run with the correct branch to get a clean migration.
-
-To change it, either edit `.env`:
-
-```
-ARGO_DB_BRANCH=feature/my-schema-change
-```
-
-Or pass it inline:
-
-```bash
-ARGO_DB_BRANCH=feature/my-schema-change docker compose up -d argo-db-app
-```
-
-To re-run migrations from scratch:
-
-```bash
-docker compose down argo-db-app
-docker volume rm projects_argo-db-data   # or whatever your volume prefix is
-docker compose up -d argo-db-app
-```
-
-> **Note:** The container mounts your `~/.ssh` directory (read-only) so it can clone private repos over SSH. Make sure your SSH keys have access to the `argo.db` repo.
-
 ## Backend services
 
 The actual application code lives in `backends/`. Alcyone can be run via `docker compose up -d alcyone-api`. Phoebe services can be run via `docker compose --profile phoebe up -d` after building their images locally.
@@ -277,6 +226,12 @@ docker compose up -d --force-recreate --no-deps <service>
 
 **Strip and recreate**
 
+podman
 ```bash
 podman-compose down -v --remove-orphans && podman-compose pull && podman-compose up -d
+```
+
+docker
+```bash
+docker compose down -v --remove-orphans && podman-compose pull && podman-compose up -d
 ```
