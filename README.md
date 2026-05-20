@@ -24,8 +24,6 @@ ARGO_DB_BRANCH=feature/your-branch docker compose up -d --force-recreate --no-de
 To add a new Kafka topic, set the `KAFKA_TOPICS` environment variable in your `.env` file to include the new topic name.
 
 
-```bash
-
 
 ### Core infrastructure services and ports
 
