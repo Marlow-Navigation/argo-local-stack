@@ -7,14 +7,17 @@ set -e
 STACK_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Detect compose command
-if command -v docker-compose &>/dev/null && docker info &>/dev/null 2>&1; then
+if docker compose version &>/dev/null 2>&1; then
+  COMPOSE="docker compose"
+  RUNTIME="docker"
+elif command -v docker-compose &>/dev/null && docker info &>/dev/null 2>&1; then
   COMPOSE="docker-compose"
   RUNTIME="docker"
 elif command -v podman-compose &>/dev/null; then
   COMPOSE="podman-compose"
   RUNTIME="podman"
 else
-  echo "❌ Neither docker-compose nor podman-compose found"
+  echo "❌ No compose tool found (docker compose / docker-compose / podman-compose)"
   exit 1
 fi
 
